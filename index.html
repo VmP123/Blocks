@@ -1,0 +1,220 @@
+<html>
+	<head>
+		<script src="pixi.js"></script>
+	</head>
+	
+	<body style="margin: 0">
+		<script>
+
+			var states = {
+				INIT: 0,
+				GAMEON: 1,
+				GAMEOVER: 2
+			}
+		
+			var directions = {
+				UP: 0,
+				DOWN: 1,
+				RIGHT: 2,
+				LEFT: 3
+			}
+			
+			var app = {
+				width: 640, //window.innerWidth,
+				height: 480, //window.innerHeight,
+				renderer: null,
+				stage: null,
+				fontStyle: { font: '24px Silkscreen' },
+				texts: {},
+				interval: 1000,
+				textures: {},
+				blockWidth: 80,
+				blockHeight: 80,
+				playfield: [[null, null, null], [null, null, null], [null, null, null]],
+				state: null,
+				moveCount: 0
+			}
+		
+			function init() {
+				app.renderer = PIXI.autoDetectRenderer(app.width, app.height);
+				app.renderer.backgroundColor = 0xFFFFFF
+				document.body.appendChild(app.renderer.view);
+				app.stage = new PIXI.Container();
+				
+				PIXI.loader
+					.add("block", "block.png")
+					.add("silk", "silk.fnt")
+					.load(function (loader, resources) {
+						var rect = new PIXI.Rectangle(0, 0, app.blockWidth, app.blockHeight);
+						app.textures.block = new PIXI.Texture(resources.block.texture, rect);
+					
+						createPlayfield();
+						startGame();
+					}
+				);
+			}
+			init();
+			
+			function createPlayfield() {
+				var playfieldContainer = new PIXI.Container();
+				
+				for (var i = 0; i < 8; i++) {											
+					var blockContainer = new PIXI.Container();
+					blockContainer.x = app.blockWidth * i - (Math.floor(i / 3) * (3 * app.blockWidth));
+					blockContainer.y = Math.floor(i / 3) * app.blockHeight;
+					blockContainer.blockNumber = i + 1;
+					
+					var block = new PIXI.Sprite(app.textures.block);
+					blockContainer.addChild(block)
+
+					var text = new PIXI.extras.BitmapText('' + (i + 1), app.fontStyle);
+					text.x = 32;
+					text.y = 27;
+					blockContainer.addChild(text);
+					
+					playfieldContainer.addChild(blockContainer);
+					app.playfield[Math.floor(i / 3)][i - (Math.floor(i / 3) * 3)] = blockContainer;
+				}
+				
+				app.stage.addChild(playfieldContainer);
+				app.emptyBlock = {x: 2, y: 2};
+			}
+			
+			function randomizePlayfield() {
+				var direction;
+								
+				for(var i = 0; i < 200; i++) {
+					direction = Math.floor(Math.random() * 4)
+					while(!tryMove(direction++ % 4)) {}
+				}
+			}
+			
+			function startGame() {
+				randomizePlayfield();
+				
+				app.moveCount = 0;
+				app.time = 0;
+				
+				createTexts();
+				refreshTexts();
+				app.state = states.GAMEON;
+			}
+			
+			function createTexts() {
+				app.texts.moveCount = new PIXI.extras.BitmapText('', app.fontStyle);
+				app.texts.moveCount.x = 260;
+				app.texts.moveCount.y = 25;
+				app.stage.addChild(app.texts.moveCount);	
+			}
+			
+			function refreshTexts() {
+				if (app.texts.moveCount)
+					app.texts.moveCount.text = 'Moves: ' + (app.moveCount);
+			}
+			
+			function getMovableBlock(direction) {
+				if (direction == directions.UP)
+					return app.playfield[app.emptyBlock.y + 1][app.emptyBlock.x];
+				else if (direction == directions.DOWN)
+					return app.playfield[app.emptyBlock.y - 1][app.emptyBlock.x];
+				else if (direction == directions.LEFT)
+					return app.playfield[app.emptyBlock.y][app.emptyBlock.x + 1];
+				else if (direction == directions.RIGHT)
+					return app.playfield[app.emptyBlock.y][app.emptyBlock.x - 1];
+			}
+			
+			function move(block, direction) {
+				if (direction == directions.UP) {
+					app.playfield[app.emptyBlock.y][app.emptyBlock.x] = block;
+					app.playfield[++app.emptyBlock.y][app.emptyBlock.x] = null;
+					block.y -= app.blockHeight;
+				}
+				else if (direction == directions.DOWN) {
+					app.playfield[app.emptyBlock.y][app.emptyBlock.x] = block;
+					app.playfield[--app.emptyBlock.y][app.emptyBlock.x] = null;
+					block.y += app.blockHeight;
+				}
+				else if (direction == directions.LEFT) {
+					app.playfield[app.emptyBlock.y][app.emptyBlock.x] = block;
+					app.playfield[app.emptyBlock.y][++app.emptyBlock.x] = null;
+					block.x -= app.blockWidth;
+				}
+				else if (direction == directions.RIGHT) {
+					app.playfield[app.emptyBlock.y][app.emptyBlock.x] = block;
+					app.playfield[app.emptyBlock.y][--app.emptyBlock.x] = null;
+					block.x += app.blockWidth;
+				}
+			}
+			
+			function canMove(direction) {
+				if (direction == directions.UP && app.emptyBlock.y == 2)
+					return false;
+				else if (direction == directions.DOWN && app.emptyBlock.y == 0)
+					return false;
+				else if (direction == directions.LEFT && app.emptyBlock.x == 2)
+					return false;
+				else if (direction == directions.RIGHT && app.emptyBlock.x == 0)
+					return false;
+					
+				return true;
+			}
+			
+			function isGameComplete() {
+				for (var i = 0; i < 8; i++) {
+					var x = i - ((Math.floor(i / 3) * 3));
+					var y = Math.floor(i / 3); 
+					var block = app.playfield[y][x]
+				
+					if (!block || block.blockNumber != i + 1)
+						return false;
+				}
+				
+				return true;
+			}
+			
+			function gameComplete() {
+				app.state = states.GAMEOVER;
+			}
+			
+			function tryMove(direction) {
+				if (canMove(direction)) {
+					var block = getMovableBlock(direction);
+					move(block, direction);
+					
+					app.moveCount++;
+					refreshTexts();
+					
+					if (app.state == states.GAMEON && isGameComplete())
+						gameComplete();
+					
+					return true;
+				}
+				else {
+					return false;
+				}
+			}
+			
+			window.addEventListener("keyup", function (key) {
+					if (app.state == states.GAMEON) {
+						if (key.keyCode == 38)
+							tryMove(directions.UP)
+						else if (key.keyCode == 40)
+							tryMove(directions.DOWN)
+						else if (key.keyCode == 37)
+							tryMove(directions.LEFT)
+						else if (key.keyCode == 39)
+							tryMove(directions.RIGHT)					
+					}
+				}, false
+			);
+			
+			function update() {
+				app.renderer.render(app.stage);
+				requestAnimationFrame(update);
+			}
+			requestAnimationFrame(update);
+			
+		</script>
+	</body>
+		
+</html>
